@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import aiohttp
 import hmac
@@ -55,7 +55,8 @@ class OKXTracker:
     async def make_okx_request(self, method: str, endpoint: str, params: Dict = None):
         """Gửi request đến OKX API với error handling"""
         try:
-            timestamp = datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+            # Tạo timestamp theo format OKX yêu cầu (ISO 8601)
+            timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
             request_path = endpoint
             body = ''
             
