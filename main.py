@@ -40,7 +40,11 @@ class OKXTracker:
 
     def generate_signature(self, timestamp: str, method: str, request_path: str, body: str = ''):
         """Tạo chữ ký cho OKX API"""
-        message = timestamp + method + request_path + body
+        if body:
+            message = timestamp + method + request_path + body
+        else:
+            message = timestamp + method + request_path
+        
         mac = hmac.new(
             bytes(self.secret_key, encoding='utf-8'),
             bytes(message, encoding='utf-8'),
@@ -51,14 +55,15 @@ class OKXTracker:
     async def make_okx_request(self, method: str, endpoint: str, params: Dict = None):
         """Gửi request đến OKX API với error handling"""
         try:
-            timestamp = datetime.utcnow().isoformat()[:-3] + 'Z'
+            timestamp = datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
             request_path = endpoint
+            body = ''
             
             if params and method == 'GET':
                 query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
                 request_path += f"?{query_string}"
             
-            signature = self.generate_signature(timestamp, method, request_path)
+            signature = self.generate_signature(timestamp, method, request_path, body)
             
             headers = {
                 'OK-ACCESS-KEY': self.api_key,
@@ -71,10 +76,11 @@ class OKXTracker:
             async with aiohttp.ClientSession() as session:
                 url = f"{self.base_url}{request_path}"
                 async with session.request(method, url, headers=headers, timeout=10) as response:
+                    result = await response.json()
                     if response.status == 200:
-                        return await response.json()
+                        return result
                     else:
-                        logger.error(f"OKX API Error: {response.status}")
+                        logger.error(f"OKX API Error {response.status}: {result}")
                         return None
                         
         except asyncio.TimeoutError:
@@ -355,14 +361,23 @@ Xin chào {update.effective_user.first_name}!
         query = update.callback_query
         await query.answer()
 
+        # Tạo fake update với message từ callback
+        class FakeUpdate:
+            def __init__(self, query):
+                self.message = query.message
+                self.effective_user = query.from_user
+                self.callback_query = query
+
+        fake_update = FakeUpdate(query)
+
         if query.data == "today_profit":
-            await self.today_profit_command(update, context)
+            await self.today_profit_command(fake_update, context)
         elif query.data == "monthly_report":
-            await self.monthly_report_command(update, context)
+            await self.monthly_report_command(fake_update, context)
         elif query.data == "account_balance":
-            await self.balance_command(update, context)
+            await self.balance_command(fake_update, context)
         elif query.data == "refresh_data":
-            await self.refresh_command(update, context)
+            await self.refresh_command(fake_update, context)
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Xử lý lỗi"""
